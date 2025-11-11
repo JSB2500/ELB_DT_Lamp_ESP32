@@ -1,0 +1,26 @@
+===========================================================
+Required mods to esp-idf:
+=> tcp.c: Comment out line 1758 (LWIP_ASSERT).
+===========================================================
+Include paths:
+
+"org.eclipse.cdt.build.core.settings.holder.incpaths" useByScannerDiscovery="false" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;${ESP32TOOLCHAIN}/xtensa-esp32-elf/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ESP32TOOLCHAIN}/xtensa-esp32-elf/include/sys&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${IDF_PATH}/components\log\include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${IDF_PATH}/components/esp_common/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${IDF_PATH}/components/esp_wifi/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${IDF_PATH}/components\esp_event\include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${IDF_PATH}/components/driver/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${IDF_PATH}/components/lwip/lwip/src/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${IDF_PATH}/components/freertos/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${IDF_PATH}/components/spi_flash/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${IDF_PATH}/components\nvs_flash\include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${IDF_PATH}/components\soc\esp32\include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${IDF_PATH}/components\soc\esp32\include\hal&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${IDF_PATH}/components/tcpip_adapter/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${IDF_PATH}/components\soc\include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${IDF_PATH}/components/newlib/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/build/config&quot;"/>
+								</option>
+===========================================================                                
