@@ -173,19 +173,43 @@ void NVS_Initialize()
 
 #define WiFi_PortNumber (80)
 
-static uint32_t WiFi_NumCredentials = 0;
+typedef struct 
+{
+    const char* ssid;
+    const char* password;
+} wifi_credential_t;
+
 static uint32_t WiFi_CurrentCredentialIndex = 0;
 static uint32_t WiFi_NumConnectionAttempts = 0;
-static std::vector<std::string> WiFi_SSIDs = WiFiCredentials_SSIDs;
-static std::vector<std::string> WiFi_Passwords = WiFiCredentials_Passwords;
+static std::vector<wifi_credential_t> WiFiCredentials = User_WiFiCredentials;
 static EventGroupHandle_t WiFi_EventGroup;
 const int WiFi_ConnectedBit = BIT0;
 
-void SetWifiCredential(wifi_config_t * wifi_config_ptr, uint32_t i_CredentialIndex)
+void  ConnectToWiFi(wifi_credential_t *pCredential)
 {
-  strlcpy((char *)wifi_config_ptr->sta.ssid, WiFi_SSIDs[i_CredentialIndex].c_str(), sizeof(wifi_config_ptr->sta.ssid));
-  strlcpy((char *)wifi_config_ptr->sta.password, WiFi_Passwords[i_CredentialIndex].c_str(), sizeof(wifi_config_ptr->sta.password));
-  ESP_LOGI(WiFiLogTag, "Trying to connect to WiFi access point with SSID: %s", (char *)wifi_config_ptr->sta.ssid);
+  wifi_config_t wifi_config;
+
+  ESP_LOGI(WiFiLogTag, "Trying to connect to WiFi access point with SSID: %s", pCredential->ssid);
+ 
+  memset(&wifi_config, 0, sizeof(wifi_config));
+
+  strlcpy((char *)wifi_config.sta.ssid, pCredential->ssid, sizeof(wifi_config.sta.ssid));
+  strlcpy((char *)wifi_config.sta.password, pCredential->password, sizeof(wifi_config.sta.password));
+  
+	/* Authmode threshold resets to WPA2 as default if password matches WPA2 standards (pasword len => 8).
+	 * If you want to connect the device to deprecated WEP/WPA networks, Please set the threshold value
+	 * to WIFI_AUTH_WEP/WIFI_AUTH_WPA_PSK and set the password with length and format matching to
+	 * WIFI_AUTH_WEP/WIFI_AUTH_WPA_PSK standards.
+	 */
+
+	wifi_config.sta.threshold.authmode = ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD,
+	wifi_config.sta.sae_pwe_h2e = ESP_WIFI_SAE_MODE,
+  strlcpy((char *) wifi_config.sta.sae_h2e_identifier, EXAMPLE_H2E_IDENTIFIER, sizeof(EXAMPLE_H2E_IDENTIFIER));
+
+  WiFi_NumConnectionAttempts = 0;
+
+  ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+  ESP_ERROR_CHECK(esp_wifi_connect());
 }
 
 static void WiFi_EventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
@@ -197,19 +221,9 @@ static void WiFi_EventHandler(void* arg, esp_event_base_t event_base, int32_t ev
   }
   else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
   {
-    if (WiFi_NumConnectionAttempts < 25)
+/*
+    if (WiFi_NumConnectionAttempts < 1)
     {
-      // Try other access points:
-      wifi_config_t wifi_config;
-
-      ++WiFi_CurrentCredentialIndex;
-      if (WiFi_CurrentCredentialIndex == WiFi_NumCredentials)
-        WiFi_CurrentCredentialIndex = 0;
-
-      ESP_ERROR_CHECK(esp_wifi_get_config(WIFI_IF_STA, &wifi_config));
-      SetWifiCredential(&wifi_config, WiFi_CurrentCredentialIndex);
-      ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
-
       esp_wifi_connect();
 
       xEventGroupClearBits(WiFi_EventGroup, WiFi_ConnectedBit);
@@ -218,7 +232,9 @@ static void WiFi_EventHandler(void* arg, esp_event_base_t event_base, int32_t ev
 
       ESP_LOGI(WiFiLogTag, "Attempting to connect");
     }
-    else ESP_LOGI(WiFiLogTag, "Failed to connect");
+    else 
+*/
+      ESP_LOGI(WiFiLogTag, "Failed to connect");
   }
   else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
   {
@@ -230,16 +246,6 @@ static void WiFi_EventHandler(void* arg, esp_event_base_t event_base, int32_t ev
 
 void WiFi_Initialize(void)
 {
-  if  ((WiFi_SSIDs.size() ==0 ) || (WiFi_SSIDs.size() != WiFi_Passwords.size()))
-  {
-    ESP_LOGE(WiFiLogTag, "Invalid WiFi Credentials");
-    return;
-  }
-
-  WiFi_NumCredentials = WiFi_SSIDs.size();
-  WiFi_CurrentCredentialIndex = 0;
-  WiFi_NumConnectionAttempts = 0;
-
   WiFi_EventGroup = xEventGroupCreate();
 
   ESP_ERROR_CHECK(esp_netif_init());
@@ -254,22 +260,23 @@ void WiFi_Initialize(void)
   esp_event_handler_instance_t instance_got_ip;
   ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &WiFi_EventHandler, NULL, &instance_any_id));
   ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &WiFi_EventHandler, NULL, &instance_got_ip));
-
-  wifi_config_t wifi_config;
-  memset(&wifi_config, 0, sizeof(wifi_config));
-  SetWifiCredential(&wifi_config, WiFi_CurrentCredentialIndex);
-	/* Authmode threshold resets to WPA2 as default if password matches WPA2 standards (pasword len => 8).
-	 * If you want to connect the device to deprecated WEP/WPA networks, Please set the threshold value
-	 * to WIFI_AUTH_WEP/WIFI_AUTH_WPA_PSK and set the password with length and format matching to
-	 * WIFI_AUTH_WEP/WIFI_AUTH_WPA_PSK standards.
-	 */
-	wifi_config.sta.threshold.authmode = ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD,
-	wifi_config.sta.sae_pwe_h2e = ESP_WIFI_SAE_MODE,
-  strlcpy((char *) wifi_config.sta.sae_h2e_identifier, EXAMPLE_H2E_IDENTIFIER, sizeof(EXAMPLE_H2E_IDENTIFIER));
-  
   ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-  ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
   ESP_ERROR_CHECK(esp_wifi_start());
+  
+  EventBits_t WaitBits = xEventGroupWaitBits(WiFi_EventGroup, WiFi_ConnectedBit, pdFALSE, pdFALSE, portMAX_DELAY);
+
+  WiFi_CurrentCredentialIndex = 0;
+  while(WiFi_CurrentCredentialIndex<WiFiCredentials.size())
+  {
+    ConnectToWiFi(&WiFiCredentials[WiFi_CurrentCredentialIndex]);
+    
+    if (WaitBits & WiFi_ConnectedBit) 
+      break;
+    
+    ++WiFi_CurrentCredentialIndex;
+    // if (WiFi_CurrentCredentialIndex == WiFi_NumCredentials)
+    //  WiFi_CurrentCredentialIndex = 0;
+  }
 }
 
 void WifiServer_Go(void *)
