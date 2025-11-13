@@ -35,8 +35,6 @@
 //
 #include "sdkconfig.h"
 //
-#include "../../WiFiCredentials.h"
-//
 #include <string>
 #include <regex>
 
@@ -50,6 +48,8 @@ static const char WiFiLogTag[] = "WiFi";
 
 ///////////////////////////////////////////////////////////////////////////////
 // Configuration:
+
+#include "../../WiFiCredentials.h"
 
 #define ProductName "Emma's DT lamp!"
 
@@ -96,21 +96,17 @@ static const char WiFiLogTag[] = "WiFi";
 #define TouchPanelSPI_DMAChannel 2
 
 ///////////////////////////////////////////////////////////////////////////////
-// TouchPanel:
+// TouchPanel pins:
 
-// Pins:
 #define TouchPanel_CSX_GPIO 21
-
 ///////////////////////////////////////////////////////////////////////////////
-// LEDs:
-//
-// Pins:
+// LED pins:
+
 #define LED_Head_WarmWhite_GPIO 22
 #define LED_Head_NaturalWhite_GPIO 23
 #define LED_Head_Red_GPIO 2
 #define LED_Head_Green_GPIO 4
 #define LED_Head_Blue_GPIO 5
-//
 ///////////////////////////////////////////////////////////////////////////////
 // Lamp state:
 
@@ -118,7 +114,6 @@ static int Off = 0;
 static float WarmBrightness = 0, NaturalBrightness = 0;
 static float RedBrightness = 0, GreenBrightness = 0, BlueBrightness = 0;
 static uint8_t OffChanged = 0;
-
 ///////////////////////////////////////////////////////////////////////////////
 // Utility functions:
 
@@ -178,10 +173,20 @@ void NVS_Initialize()
 
 #define WiFi_PortNumber (80)
 
+static uint32_t WiFi_NumCredentials = 0;
+static uint32_t WiFi_CurrentCredentialIndex = 0;
+static uint32_t WiFi_NumConnectionAttempts = 0;
+static std::vector<std::string> WiFi_SSIDs = WiFiCredentials_SSIDs;
+static std::vector<std::string> WiFi_Passwords = WiFiCredentials_Passwords;
 static EventGroupHandle_t WiFi_EventGroup;
 const int WiFi_ConnectedBit = BIT0;
 
-static uint32_t WiFi_NumConnectionAttempts = 0;
+void SetWifiCredential(wifi_config_t * wifi_config_ptr, uint32_t i_CredentialIndex)
+{
+  strlcpy((char *)wifi_config_ptr->sta.ssid, WiFi_SSIDs[i_CredentialIndex].c_str(), sizeof(wifi_config_ptr->sta.ssid));
+  strlcpy((char *)wifi_config_ptr->sta.password, WiFi_Passwords[i_CredentialIndex].c_str(), sizeof(wifi_config_ptr->sta.password));
+  ESP_LOGI(WiFiLogTag, "Trying to connect to WiFi access point with SSID: %s", (char *)wifi_config_ptr->sta.ssid);
+}
 
 static void WiFi_EventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
 {
@@ -192,25 +197,23 @@ static void WiFi_EventHandler(void* arg, esp_event_base_t event_base, int32_t ev
   }
   else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
   {
-    if (WiFi_NumConnectionAttempts < 10)
+    if (WiFi_NumConnectionAttempts < 25)
     {
       // Try other access points:
       wifi_config_t wifi_config;
+
+      ++WiFi_CurrentCredentialIndex;
+      if (WiFi_CurrentCredentialIndex == WiFi_NumCredentials)
+        WiFi_CurrentCredentialIndex = 0;
+
       ESP_ERROR_CHECK(esp_wifi_get_config(WIFI_IF_STA, &wifi_config));
-      if (strcasecmp((char *)wifi_config.ap.ssid, "JSB0") == 0)
-        sprintf((char *)wifi_config.ap.ssid, "JSB1");
-      else if (strcasecmp((char *)wifi_config.ap.ssid, "JSB1") == 0)
-        sprintf((char *)wifi_config.ap.ssid, "JSB2");
-      else if (strcasecmp((char *)wifi_config.ap.ssid, "JSB2") == 0)
-        sprintf((char *)wifi_config.ap.ssid, "JSB3");
-      else if (strcasecmp((char *)wifi_config.ap.ssid, "JSB3") == 0)
-        sprintf((char *)wifi_config.ap.ssid, "JSB4");
-      else if (strcasecmp((char *)wifi_config.ap.ssid, "JSB4") == 0)
-        sprintf((char *)wifi_config.ap.ssid, "JSB0");
+      SetWifiCredential(&wifi_config, WiFi_CurrentCredentialIndex);
       ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
 
       esp_wifi_connect();
+
       xEventGroupClearBits(WiFi_EventGroup, WiFi_ConnectedBit);
+
       ++WiFi_NumConnectionAttempts;
 
       ESP_LOGI(WiFiLogTag, "Attempting to connect");
@@ -227,6 +230,16 @@ static void WiFi_EventHandler(void* arg, esp_event_base_t event_base, int32_t ev
 
 void WiFi_Initialize(void)
 {
+  if  ((WiFi_SSIDs.size() ==0 ) || (WiFi_SSIDs.size() != WiFi_Passwords.size()))
+  {
+    ESP_LOGE(WiFiLogTag, "Invalid WiFi Credentials");
+    return;
+  }
+
+  WiFi_NumCredentials = WiFi_SSIDs.size();
+  WiFi_CurrentCredentialIndex = 0;
+  WiFi_NumConnectionAttempts = 0;
+
   WiFi_EventGroup = xEventGroupCreate();
 
   ESP_ERROR_CHECK(esp_netif_init());
@@ -242,13 +255,9 @@ void WiFi_Initialize(void)
   ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &WiFi_EventHandler, NULL, &instance_any_id));
   ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &WiFi_EventHandler, NULL, &instance_got_ip));
 
-  wifi_config_t wifi_config = {};
+  wifi_config_t wifi_config;
   memset(&wifi_config, 0, sizeof(wifi_config));
-  char SSID[] = WiFi_SSID;
-  char Password[] = WiFi_Password;
-
-  strlcpy((char *) wifi_config.sta.ssid, SSID, sizeof(SSID));
-  strncpy((char *) wifi_config.sta.password, Password, sizeof(Password));
+  SetWifiCredential(&wifi_config, WiFi_CurrentCredentialIndex);
 	/* Authmode threshold resets to WPA2 as default if password matches WPA2 standards (pasword len => 8).
 	 * If you want to connect the device to deprecated WEP/WPA networks, Please set the threshold value
 	 * to WIFI_AUTH_WEP/WIFI_AUTH_WPA_PSK and set the password with length and format matching to
@@ -261,29 +270,6 @@ void WiFi_Initialize(void)
   ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
   ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
   ESP_ERROR_CHECK(esp_wifi_start());
-
-#if 0
-    /* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or connection failed for the maximum
-     * number of re-tries (WIFI_FAIL_BIT). The bits are set by event_handler() (see above) */
-    EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
-            WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
-            pdFALSE,
-            pdFALSE,
-            portMAX_DELAY);
-
-    /* xEventGroupWaitBits() returns the bits before the call returned, hence we can test which event actually happened. */
-    if (bits & WIFI_CONNECTED_BIT) 
-		{
-      ESP_LOGI(TAG, "connected to ap SSID", EXAMPLE_ESP_WIFI_SSID);
-    } else if (bits & WIFI_FAIL_BIT) 
-		{
-      ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s", EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
-    } 
-		else 
-		{
-      ESP_LOGE(TAG, "UNEXPECTED EVENT");
-    }
-#endif		
 }
 
 void WifiServer_Go(void *)
@@ -907,7 +893,7 @@ void app_main()
 	  .data5_io_num = -1,
 	  .data6_io_num = -1,
 	  .data7_io_num = -1,
-    .data_io_default_level = 1, // JSB added 11/11/2025
+    .data_io_default_level = 0,
 	  .max_transfer_sz = 0,
 	  .flags = 0,
       .isr_cpu_id = ESP_INTR_CPU_AFFINITY_AUTO,
@@ -929,7 +915,7 @@ void app_main()
     .data5_io_num = -1,
     .data6_io_num = -1,
     .data7_io_num = -1,
-    .data_io_default_level = 1, // JSB added 11/11/2025
+    .data_io_default_level = 0,
     .max_transfer_sz = 0,
     .flags = 0,
     .isr_cpu_id = ESP_INTR_CPU_AFFINITY_AUTO,
