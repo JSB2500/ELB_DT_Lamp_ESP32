@@ -186,12 +186,12 @@ static EventGroupHandle_t WiFi_EventGroup;
 const int WiFi_ConnectedBit = BIT0;
 const int WiFi_ConnectionFailedBit = BIT1;
 
-void  ConnectToWiFi(wifi_credential_t *pCredential)
+void  ConfigureWiFi(wifi_credential_t *pCredential)
 {
   wifi_config_t wifi_config;
 
-  ESP_LOGI(WiFiLogTag, "Trying to connect to WiFi access point with SSID: %s", pCredential->ssid.c_str());
- 
+  ESP_LOGI(WiFiLogTag, "Configuring WiFi for SSID: %s", pCredential->ssid.c_str());
+
   memset(&wifi_config, 0, sizeof(wifi_config));
 
   strlcpy((char *)wifi_config.sta.ssid, pCredential->ssid.c_str(), sizeof(wifi_config.sta.ssid));
@@ -207,10 +207,7 @@ void  ConnectToWiFi(wifi_credential_t *pCredential)
 	wifi_config.sta.sae_pwe_h2e = ESP_WIFI_SAE_MODE,
   strlcpy((char *) wifi_config.sta.sae_h2e_identifier, EXAMPLE_H2E_IDENTIFIER, sizeof(EXAMPLE_H2E_IDENTIFIER));
 
-  WiFi_NumConnectionAttempts = 0;
-
   ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
-  ESP_ERROR_CHECK(esp_wifi_connect());
 }
 
 static void WiFi_EventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
@@ -264,14 +261,29 @@ void WiFi_Initialize(void)
   ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &WiFi_EventHandler, NULL, &instance_any_id));
   ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &WiFi_EventHandler, NULL, &instance_got_ip));
   ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-  ESP_ERROR_CHECK(esp_wifi_start());
   
   WiFi_CurrentCredentialIndex = 0;
   while(WiFi_CurrentCredentialIndex<WiFiCredentials.size())
   {
     xEventGroupClearBits(WiFi_EventGroup, WiFi_ConnectedBit | WiFi_ConnectionFailedBit);
 
-    ConnectToWiFi(&WiFiCredentials[WiFi_CurrentCredentialIndex]);
+    ConfigureWiFi(&WiFiCredentials[WiFi_CurrentCredentialIndex]);
+
+    WiFi_NumConnectionAttempts = 0;
+
+/*
+    bool Started=false;
+    if (!Started)
+    {
+      Started=true;
+      ESP_ERROR_CHECK(esp_wifi_start());
+    }
+    else
+    {
+      ESP_ERROR_CHECK(esp_wifi_connect());
+    }
+*/
+    ESP_ERROR_CHECK(esp_wifi_start());
     
     EventBits_t WaitBits = xEventGroupWaitBits(WiFi_EventGroup, WiFi_ConnectedBit | WiFi_ConnectionFailedBit, pdFALSE, pdFALSE, portMAX_DELAY);
 
