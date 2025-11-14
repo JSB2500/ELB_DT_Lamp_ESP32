@@ -22,9 +22,8 @@ Monitoring:
 • Press and hold BOOT button.  
 • Command: idf --port COMx monitor  
 
-Debugging:  
+JTAG debugging:  
 • General notes:  
-  • JTAG debugging used.  
   • The basic principle is to get OpenOCD running in one esp-idf terminal, and GDB running in another one.
 • Help: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/jtag-debugging/index.html
 • Device: FT4232 (Quad) 
@@ -53,3 +52,7 @@ Debugging:
   • Step over: n  
   • Step into: s  
   • Continue to calling code of current function: finish  
+
+WiFi debugging:  
+• Use "idf.py menuconfig" to set default log verbosity to "Info".
+  • Component config => Log => Log level => Default log verbosity => Info
