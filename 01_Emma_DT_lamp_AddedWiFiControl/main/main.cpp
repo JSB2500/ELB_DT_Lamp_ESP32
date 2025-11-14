@@ -35,9 +35,10 @@
 //
 #include "sdkconfig.h"
 //
-#include "../../WiFiCredentials.h"
+#include <string>
+#include <vector>
 
-static const char DefaultLogTag[] = "main";
+static const char DefaultLogTag[] = "";
 static const char WiFiLogTag[] = "WiFi";
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -47,6 +48,8 @@ static const char WiFiLogTag[] = "WiFi";
 
 ///////////////////////////////////////////////////////////////////////////////
 // Configuration:
+
+#include "../../WiFiCredentials.h"
 
 #define ProductName "Emma's DT lamp!"
 
@@ -93,21 +96,17 @@ static const char WiFiLogTag[] = "WiFi";
 #define TouchPanelSPI_DMAChannel 2
 
 ///////////////////////////////////////////////////////////////////////////////
-// TouchPanel:
+// TouchPanel pins:
 
-// Pins:
 #define TouchPanel_CSX_GPIO 21
-
 ///////////////////////////////////////////////////////////////////////////////
-// LEDs:
-//
-// Pins:
+// LED pins:
+
 #define LED_Head_WarmWhite_GPIO 22
 #define LED_Head_NaturalWhite_GPIO 23
 #define LED_Head_Red_GPIO 2
 #define LED_Head_Green_GPIO 4
 #define LED_Head_Blue_GPIO 5
-//
 ///////////////////////////////////////////////////////////////////////////////
 // Lamp state:
 
@@ -115,7 +114,6 @@ static int Off = 0;
 static float WarmBrightness = 0, NaturalBrightness = 0;
 static float RedBrightness = 0, GreenBrightness = 0, BlueBrightness = 0;
 static uint8_t OffChanged = 0;
-
 ///////////////////////////////////////////////////////////////////////////////
 // Utility functions:
 
@@ -175,47 +173,62 @@ void NVS_Initialize()
 
 #define WiFi_PortNumber (80)
 
+typedef struct 
+{
+    std::string ssid;
+    std::string password;
+} wifi_credential_t;
+
+static uint32_t WiFi_CurrentCredentialIndex = 0;
+static std::vector<wifi_credential_t> WiFiCredentials = User_WiFiCredentials;
 static EventGroupHandle_t WiFi_EventGroup;
 const int WiFi_ConnectedBit = BIT0;
 
-static uint32_t WiFi_NumConnectionAttempts = 0;
+void  ConfigureWiFi(wifi_credential_t *pCredential)
+{
+  wifi_config_t wifi_config;
+
+  ESP_LOGI(WiFiLogTag, "Configuring WiFi for SSID: %s", pCredential->ssid.c_str());
+
+  memset(&wifi_config, 0, sizeof(wifi_config));
+
+  strlcpy((char *)wifi_config.sta.ssid, pCredential->ssid.c_str(), sizeof(wifi_config.sta.ssid));
+  strlcpy((char *)wifi_config.sta.password, pCredential->password.c_str(), sizeof(wifi_config.sta.password));
+  
+	/* Authmode threshold resets to WPA2 as default if password matches WPA2 standards (pasword len => 8).
+	 * If you want to connect the device to deprecated WEP/WPA networks, Please set the threshold value
+	 * to WIFI_AUTH_WEP/WIFI_AUTH_WPA_PSK and set the password with length and format matching to
+	 * WIFI_AUTH_WEP/WIFI_AUTH_WPA_PSK standards.
+	 */
+
+	wifi_config.sta.threshold.authmode = ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD,
+	wifi_config.sta.sae_pwe_h2e = ESP_WIFI_SAE_MODE,
+  strlcpy((char *) wifi_config.sta.sae_h2e_identifier, EXAMPLE_H2E_IDENTIFIER, sizeof(EXAMPLE_H2E_IDENTIFIER));
+
+  ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+}
 
 static void WiFi_EventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
 {
   if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
   {
+    ESP_LOGI(WiFiLogTag, "Event: WIFI_EVENT_STA_START");
     esp_wifi_connect();
-    WiFi_NumConnectionAttempts = 0;
   }
   else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
   {
-    if (WiFi_NumConnectionAttempts < 10)
-    {
-      // Try other access points:
-      wifi_config_t wifi_config;
-      ESP_ERROR_CHECK(esp_wifi_get_config(ESP_IF_WIFI_STA, &wifi_config));
-      if (strcasecmp((char *)wifi_config.ap.ssid, "JSB0") == 0)
-        sprintf((char *)wifi_config.ap.ssid, "JSB1");
-      else if (strcasecmp((char *)wifi_config.ap.ssid, "JSB1") == 0)
-        sprintf((char *)wifi_config.ap.ssid, "JSB2");
-      else if (strcasecmp((char *)wifi_config.ap.ssid, "JSB2") == 0)
-        sprintf((char *)wifi_config.ap.ssid, "JSB3");
-      else if (strcasecmp((char *)wifi_config.ap.ssid, "JSB3") == 0)
-        sprintf((char *)wifi_config.ap.ssid, "JSB4");
-      else if (strcasecmp((char *)wifi_config.ap.ssid, "JSB4") == 0)
-        sprintf((char *)wifi_config.ap.ssid, "JSB0");
-      ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
-
-      esp_wifi_connect();
-      xEventGroupClearBits(WiFi_EventGroup, WiFi_ConnectedBit);
-      ++WiFi_NumConnectionAttempts;
-
-      ESP_LOGI(WiFiLogTag, "Attempting to connect");
-    }
-    else ESP_LOGI(WiFiLogTag, "Failed to connect");
+    ESP_LOGI(WiFiLogTag, "Event: WIFI_EVENT_STA_DISCONNECTED");
+    
+    ++WiFi_CurrentCredentialIndex;
+    if (WiFi_CurrentCredentialIndex == WiFiCredentials.size())
+      WiFi_CurrentCredentialIndex = 0;
+    ConfigureWiFi(&WiFiCredentials[WiFi_CurrentCredentialIndex]);
+    esp_wifi_connect();
   }
   else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
   {
+    ESP_LOGI(WiFiLogTag, "Event: IP_EVENT_STA_GOT_IP");
+
     ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
     ESP_LOGI(WiFiLogTag, "Obtained IP:" IPSTR, IP2STR(&event->ip_info.ip));
     xEventGroupSetBits(WiFi_EventGroup, WiFi_ConnectedBit);
@@ -238,60 +251,23 @@ void WiFi_Initialize(void)
   esp_event_handler_instance_t instance_got_ip;
   ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &WiFi_EventHandler, NULL, &instance_any_id));
   ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &WiFi_EventHandler, NULL, &instance_got_ip));
-
-  wifi_config_t wifi_config =
-  {
-      .sta =
-      {
-          .ssid = WiFiCredentials_SSID,
-          .password = WiFiCredentials_Password,
-					/* Authmode threshold resets to WPA2 as default if password matches WPA2 standards (pasword len => 8).
-					 * If you want to connect the device to deprecated WEP/WPA networks, Please set the threshold value
-					 * to WIFI_AUTH_WEP/WIFI_AUTH_WPA_PSK and set the password with length and format matching to
-					 * WIFI_AUTH_WEP/WIFI_AUTH_WPA_PSK standards.
-					 */
-					.threshold.authmode = ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD,
-					.sae_pwe_h2e = ESP_WIFI_SAE_MODE,
-					.sae_h2e_identifier = EXAMPLE_H2E_IDENTIFIER,
-      },
-  };
   ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-  ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
+  WiFi_CurrentCredentialIndex = 0;
+  ConfigureWiFi(&WiFiCredentials[WiFi_CurrentCredentialIndex]);
   ESP_ERROR_CHECK(esp_wifi_start());
-
-#if 0
-    /* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or connection failed for the maximum
-     * number of re-tries (WIFI_FAIL_BIT). The bits are set by event_handler() (see above) */
-    EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
-            WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
-            pdFALSE,
-            pdFALSE,
-            portMAX_DELAY);
-
-    /* xEventGroupWaitBits() returns the bits before the call returned, hence we can test which event actually happened. */
-    if (bits & WIFI_CONNECTED_BIT) 
-		{
-      ESP_LOGI(TAG, "connected to ap SSID", EXAMPLE_ESP_WIFI_SSID);
-    } else if (bits & WIFI_FAIL_BIT) 
-		{
-      ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s", EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
-    } 
-		else 
-		{
-      ESP_LOGE(TAG, "UNEXPECTED EVENT");
-    }
-#endif		
 }
 
-void WifiServer_Go()
+void WifiServer_Go(void *)
 {
+  int rc;
+
   struct sockaddr_in clientAddress;
   struct sockaddr_in serverAddress;
 
   uint32_t InputBuffer_SizeInBytes = 1024;
-  char *pInputBuffer = malloc(InputBuffer_SizeInBytes);
+  char *pInputBuffer = (char *)malloc(InputBuffer_SizeInBytes);
   uint32_t OutputBuffer_SizeInBytes = 1024;
-  char *pOutputBuffer = malloc(OutputBuffer_SizeInBytes);
+  char *pOutputBuffer = (char *)malloc(OutputBuffer_SizeInBytes);
 
   // Create a listening socket.
   ESP_LOGI(WiFiLogTag, "Creating socket");
@@ -307,7 +283,7 @@ void WifiServer_Go()
   serverAddress.sin_addr.s_addr = htonl(INADDR_ANY);
   serverAddress.sin_port = htons(WiFi_PortNumber);
   ESP_LOGI(WiFiLogTag, "Binding socket");
-  int rc = bind(ListeningSocket, (struct sockaddr * ) &serverAddress, sizeof(serverAddress));
+  rc = bind(ListeningSocket, (struct sockaddr * ) &serverAddress, sizeof(serverAddress));
   if (rc < 0)
   {
     ESP_LOGE(WiFiLogTag, "bind(): %d %s", rc, strerror(errno));
@@ -330,7 +306,7 @@ void WifiServer_Go()
 
     // Wait for a new client connection.
     socklen_t clientAddressLength = sizeof(clientAddress);
-    int ClientSocket = accept(ListeningSocket, (struct sockaddr * ) &clientAddress, &clientAddressLength);
+    int ClientSocket = accept(ListeningSocket, (struct sockaddr *)&clientAddress, &clientAddressLength);
     if (ClientSocket < 0)
     {
       ESP_LOGE(WiFiLogTag, "Accept: %d %s", ClientSocket, strerror(errno));
@@ -511,14 +487,14 @@ typedef enum
 
 static void InitializeLEDControl()
 {
-  ledc_timer_config_t timer_conf = {0};
-  ledc_channel_config_t ledc_conf = {0};
+  ledc_timer_config_t timer_conf = {};
+  ledc_channel_config_t ledc_conf = {};
 
   timer_conf.duty_resolution = LEDC_TIMER_12_BIT;
   timer_conf.freq_hz = 5000;
   timer_conf.speed_mode = LEDC_HIGH_SPEED_MODE;
   timer_conf.timer_num = LEDC_TIMER_0;
-  timer_conf.clk_cfg = LEDC_APB_CLK;
+  timer_conf.clk_cfg = LEDC_USE_APB_CLK;
   ESP_ERROR_CHECK(ledc_timer_config(&timer_conf));
 
   ledc_conf.channel = LEDC_CHANNEL_0;
@@ -578,8 +554,8 @@ static void SetLEDBrightness(LED_t LED, float Brightness)
 //    ILI9341_DrawTextAtXY(S, 0, 160, tpLeft);
 //  }
 
-  ledc_set_duty(LEDC_HIGH_SPEED_MODE, LED, 4096 * Drive);
-  ledc_update_duty(LEDC_HIGH_SPEED_MODE, LED);
+  ledc_set_duty(LEDC_HIGH_SPEED_MODE, ledc_channel_t(LED), 4096 * Drive);
+  ledc_update_duty(LEDC_HIGH_SPEED_MODE, ledc_channel_t(LED));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -839,7 +815,7 @@ static void Go()
 
     if (Off)
     {
-      gpio_set_level(Display_BacklightX_GPIO, 0);
+      gpio_set_level(gpio_num_t(Display_BacklightX_GPIO), 0);
       SetLEDBrightness(LED_WarmWhite, 0.0f);
       SetLEDBrightness(LED_NaturalWhite, 0.0f);
       SetLEDBrightness(LED_Red, 0.0f);
@@ -848,7 +824,7 @@ static void Go()
     }
     else
     {
-      gpio_set_level(Display_BacklightX_GPIO, 1);
+      gpio_set_level(gpio_num_t(Display_BacklightX_GPIO), 1);
       SetLEDBrightness(LED_WarmWhite, WarmBrightness);
       SetLEDBrightness(LED_NaturalWhite, NaturalBrightness);
       SetLEDBrightness(LED_Red, RedBrightness);
@@ -860,6 +836,11 @@ static void Go()
   }
 }
 
+extern "C"
+{
+  void app_main();
+}
+
 void app_main()
 {
   esp_err_t ret;
@@ -869,31 +850,49 @@ void app_main()
   ESP_LOGI(DefaultLogTag, "Done\n");
 
   // Initialize the SPI buses:
-  ESP_LOGI(DefaultLogTag, "Initializing DisplaySPI bus...");
+  ESP_LOGI(DefaultLogTag, "Initializing DisplaySPI bus:\n");
   spi_bus_config_t DisplaySPI_BusConfiguration =
-      {
-          .sclk_io_num = DisplaySPI_SCK_GPIO,
-          .mosi_io_num = DisplaySPI_MOSI_GPIO,
-          .miso_io_num = DisplaySPI_MISO_GPIO,
-          .quadwp_io_num = -1,
-          .quadhd_io_num = -1
-      };
+  {
+	  .mosi_io_num = DisplaySPI_MOSI_GPIO,
+	  .miso_io_num = DisplaySPI_MISO_GPIO,
+	  .sclk_io_num = DisplaySPI_SCK_GPIO,
+	  .quadwp_io_num = -1,
+	  .quadhd_io_num = -1,
+	  .data4_io_num = -1,
+	  .data5_io_num = -1,
+	  .data6_io_num = -1,
+	  .data7_io_num = -1,
+    .data_io_default_level = 0,
+	  .max_transfer_sz = 0,
+	  .flags = 0,
+      .isr_cpu_id = ESP_INTR_CPU_AFFINITY_AUTO,
+	  .intr_flags = 0
+  };
   ret = spi_bus_initialize(DisplaySPI_HostDevice, &DisplaySPI_BusConfiguration, DisplaySPI_DMAChannel);
   assert(ret==ESP_OK);
-  ESP_LOGI(DefaultLogTag, "Done");
+  ESP_LOGI(DefaultLogTag, "Done\n");
   //
-  ESP_LOGI(DefaultLogTag, "Initializing TouchPanelSPI bus...");
+  ESP_LOGI(DefaultLogTag, "Initializing TouchPanelSPI bus:\n");
   spi_bus_config_t TouchPanelSPI_BusConfiguration =
-      {
-          .sclk_io_num = TouchPanelSPI_SCK_GPIO,
-          .mosi_io_num = TouchPanelSPI_MOSI_GPIO,
-          .miso_io_num = TouchPanelSPI_MISO_GPIO,
-          .quadwp_io_num = -1,
-          .quadhd_io_num = -1
-      };
+  {
+    .mosi_io_num = TouchPanelSPI_MOSI_GPIO,
+    .miso_io_num = TouchPanelSPI_MISO_GPIO,
+    .sclk_io_num = TouchPanelSPI_SCK_GPIO,
+    .quadwp_io_num = -1,
+    .quadhd_io_num = -1,
+    .data4_io_num = -1,
+    .data5_io_num = -1,
+    .data6_io_num = -1,
+    .data7_io_num = -1,
+    .data_io_default_level = 0,
+    .max_transfer_sz = 0,
+    .flags = 0,
+    .isr_cpu_id = ESP_INTR_CPU_AFFINITY_AUTO,
+    .intr_flags = 0
+  };
   ret = spi_bus_initialize(TouchPanelSPI_HostDevice, &TouchPanelSPI_BusConfiguration, TouchPanelSPI_DMAChannel);
   assert(ret==ESP_OK);
-  ESP_LOGI(DefaultLogTag, "Done");
+  ESP_LOGI(DefaultLogTag, "Done\n");
   fflush(stdout);
 
   // Set touch calibration: [Display area only! Don't include thick black bar at bottom, for example!]
@@ -903,21 +902,21 @@ void app_main()
   XPT2046_RawY_Min = 250; // Was 320
   XPT2046_RawY_Max = 3700; // Was 3750
 
-  ESP_LOGI(DefaultLogTag, "Initializing Display device...");
+  ESP_LOGI(DefaultLogTag, "Initializing Display device:\n");
   ILI9341_Initialize(DisplaySPI_HostDevice, Display_ResetX_GPIO, Display_CSX_GPIO, Display_D_CX_GPIO, Display_BacklightX_GPIO);
-  ESP_LOGI(DefaultLogTag, "Done");
+  ESP_LOGI(DefaultLogTag, "Done\n");
 
-  ESP_LOGI(DefaultLogTag, "Initializing TouchPanel device...");
+  ESP_LOGI(DefaultLogTag, "Initializing TouchPanel device:\n");
   XPT2046_Initialize(TouchPanelSPI_HostDevice, TouchPanel_CSX_GPIO);
-  ESP_LOGI(DefaultLogTag, "Done");
+  ESP_LOGI(DefaultLogTag, "Done\n");
 
-  ESP_LOGI(DefaultLogTag, "Initializing LED control...");
+  ESP_LOGI(DefaultLogTag, "Initializing LED control:\n");
   InitializeLEDControl();
-  ESP_LOGI(DefaultLogTag, "Done");
+  ESP_LOGI(DefaultLogTag, "Done\n");
 
-  ESP_LOGI(DefaultLogTag, "Initializing WiFi..");
+  ESP_LOGI(DefaultLogTag, "Initializing WiFi:\n");
   WiFi_Initialize();
-  ESP_LOGI(DefaultLogTag, "Done");
+  ESP_LOGI(DefaultLogTag, "Done\n");
 
   xTaskCreate(WifiServer_Go, "WifiServer", 4096, NULL, tskIDLE_PRIORITY, NULL);
 
