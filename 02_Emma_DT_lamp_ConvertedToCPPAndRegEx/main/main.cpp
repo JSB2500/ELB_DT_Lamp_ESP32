@@ -179,8 +179,10 @@ typedef struct
     std::string password;
 } wifi_credential_t;
 
+template class std::vector<wifi_credential_t>;
+
 static uint32_t WiFi_CurrentCredentialIndex = 0;
-static std::vector<wifi_credential_t> WiFiCredentials = User_WiFiCredentials;
+static std::vector<wifi_credential_t> WiFiCredentials;
 static EventGroupHandle_t WiFi_EventGroup;
 const int WiFi_ConnectedBit = BIT0;
 
@@ -237,6 +239,8 @@ static void WiFi_EventHandler(void* arg, esp_event_base_t event_base, int32_t ev
 
 void WiFi_Initialize(void)
 {
+  WiFiCredentials = std::vector<wifi_credential_t>User_WiFiCredentials;
+  
   WiFi_EventGroup = xEventGroupCreate();
 
   ESP_ERROR_CHECK(esp_netif_init());
