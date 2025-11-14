@@ -175,8 +175,8 @@ void NVS_Initialize()
 
 typedef struct 
 {
-    const char* ssid;
-    const char* password;
+    std::string ssid;
+    std::string password;
 } wifi_credential_t;
 
 static uint32_t WiFi_CurrentCredentialIndex = 0;
@@ -184,17 +184,18 @@ static uint32_t WiFi_NumConnectionAttempts = 0;
 static std::vector<wifi_credential_t> WiFiCredentials = User_WiFiCredentials;
 static EventGroupHandle_t WiFi_EventGroup;
 const int WiFi_ConnectedBit = BIT0;
+const int WiFi_ConnectionFailedBit = BIT1;
 
 void  ConnectToWiFi(wifi_credential_t *pCredential)
 {
   wifi_config_t wifi_config;
 
-  ESP_LOGI(WiFiLogTag, "Trying to connect to WiFi access point with SSID: %s", pCredential->ssid);
+  ESP_LOGI(WiFiLogTag, "Trying to connect to WiFi access point with SSID: %s", pCredential->ssid.c_str());
  
   memset(&wifi_config, 0, sizeof(wifi_config));
 
-  strlcpy((char *)wifi_config.sta.ssid, pCredential->ssid, sizeof(wifi_config.sta.ssid));
-  strlcpy((char *)wifi_config.sta.password, pCredential->password, sizeof(wifi_config.sta.password));
+  strlcpy((char *)wifi_config.sta.ssid, pCredential->ssid.c_str(), sizeof(wifi_config.sta.ssid));
+  strlcpy((char *)wifi_config.sta.password, pCredential->password.c_str(), sizeof(wifi_config.sta.password));
   
 	/* Authmode threshold resets to WPA2 as default if password matches WPA2 standards (pasword len => 8).
 	 * If you want to connect the device to deprecated WEP/WPA networks, Please set the threshold value
@@ -216,6 +217,7 @@ static void WiFi_EventHandler(void* arg, esp_event_base_t event_base, int32_t ev
 {
   if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
   {
+    ESP_LOGI(WiFiLogTag, "WIFI_EVENT_STA_START");
     esp_wifi_connect();
     WiFi_NumConnectionAttempts = 0;
   }
@@ -235,6 +237,7 @@ static void WiFi_EventHandler(void* arg, esp_event_base_t event_base, int32_t ev
     else 
 */
       ESP_LOGI(WiFiLogTag, "Failed to connect");
+      xEventGroupSetBits(WiFi_EventGroup, WiFi_ConnectionFailedBit);
   }
   else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
   {
@@ -263,13 +266,15 @@ void WiFi_Initialize(void)
   ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
   ESP_ERROR_CHECK(esp_wifi_start());
   
-  EventBits_t WaitBits = xEventGroupWaitBits(WiFi_EventGroup, WiFi_ConnectedBit, pdFALSE, pdFALSE, portMAX_DELAY);
-
   WiFi_CurrentCredentialIndex = 0;
   while(WiFi_CurrentCredentialIndex<WiFiCredentials.size())
   {
+    xEventGroupClearBits(WiFi_EventGroup, WiFi_ConnectedBit | WiFi_ConnectionFailedBit);
+
     ConnectToWiFi(&WiFiCredentials[WiFi_CurrentCredentialIndex]);
     
+    EventBits_t WaitBits = xEventGroupWaitBits(WiFi_EventGroup, WiFi_ConnectedBit | WiFi_ConnectionFailedBit, pdFALSE, pdFALSE, portMAX_DELAY);
+
     if (WaitBits & WiFi_ConnectedBit) 
       break;
     
