@@ -286,9 +286,11 @@ void WiFi_Initialize(void)
     ESP_ERROR_CHECK(esp_wifi_start());
     
     EventBits_t WaitBits = xEventGroupWaitBits(WiFi_EventGroup, WiFi_ConnectedBit | WiFi_ConnectionFailedBit, pdFALSE, pdFALSE, portMAX_DELAY);
-
+    
     if (WaitBits & WiFi_ConnectedBit) 
       break;
+    
+    ESP_ERROR_CHECK(esp_wifi_stop());
     
     ++WiFi_CurrentCredentialIndex;
     // if (WiFi_CurrentCredentialIndex == WiFi_NumCredentials)
