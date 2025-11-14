@@ -179,10 +179,9 @@ typedef struct
     std::string password;
 } wifi_credential_t;
 
-template class std::vector<wifi_credential_t>;
+static std::vector<wifi_credential_t> WiFiCredentials;
 
 static uint32_t WiFi_CurrentCredentialIndex = 0;
-static std::vector<wifi_credential_t> WiFiCredentials;
 static EventGroupHandle_t WiFi_EventGroup;
 const int WiFi_ConnectedBit = BIT0;
 
