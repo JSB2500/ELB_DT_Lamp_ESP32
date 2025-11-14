@@ -24,9 +24,10 @@ Monitoring:
 
 JTAG debugging:  
 • General notes:  
-  • The basic principle is to get OpenOCD running in one esp-idf terminal, and GDB running in another one.
-• Help: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/jtag-debugging/index.html
-• Device: FT4232 (Quad) 
+  • The basic principle is to get OpenOCD running in one esp-idf terminal, and gdb running in another one.  
+  • For this project, I've used gdb on the command line and in Eclipse.
+• Help: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/jtag-debugging/index.html  
+• Device: FT4232 (Quad)  
 • Use Zaqig to set "Quad RS232HS (Interface 0)" to use driver "WinUSB (v6.1.7600.16385)".  
 • Connections from lamp to device:  
   • J1-1 (GND) <=> GND  
@@ -36,12 +37,17 @@ JTAG debugging:
   • J1-5 (GPIO15 = TDO) <=> ADBUS2 (TDO)  
   • J1-6 (GPIO14 = TMS) <=> ADBUS1 (TMS)  
   • J1-7 (EN = nTRST) <=> [No connection]  
-  • J1-8
+  • J1-8  
 • Get command prompt using shortcut: "ESP-IDF CMD"  
 • Command: idf.py -v openocd  
-• Command: xtensa-esp32-elf-gdb -q -x build/gdbinit/symbols -x build/gdbinit/prefix_map -x build/gdbinit/connect build/Emma_DT_lamp.elf  
-• Commands:  
+• Commands for starting gdb:  
+  • xtensa-esp32-elf-gdb -q -x build/gdbinit/connect build/Emma_DT_lamp.elf  
+  • xtensa-esp32-elf-gdb -q -x build/gdbinit/symbols -x build/gdbinit/prefix_map -x build/gdbinit/connect build/Emma_DT_lamp.elf  
+  • idf.py gdb  
+    • This didn't work for me.  
+• gdb commands:  
   • Breakpoints:  
+    • List: info breakpoints
     • Set: break <FunctionName>|<LineNumber|<FileName:LineNumber>  
       • Examples:  
         • break WiFi_Initialize  
