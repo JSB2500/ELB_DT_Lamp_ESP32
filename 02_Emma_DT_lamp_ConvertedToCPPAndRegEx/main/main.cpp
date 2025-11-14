@@ -180,11 +180,9 @@ typedef struct
 } wifi_credential_t;
 
 static uint32_t WiFi_CurrentCredentialIndex = 0;
-static uint32_t WiFi_NumConnectionAttempts = 0;
 static std::vector<wifi_credential_t> WiFiCredentials = User_WiFiCredentials;
 static EventGroupHandle_t WiFi_EventGroup;
 const int WiFi_ConnectedBit = BIT0;
-const int WiFi_ConnectionFailedBit = BIT1;
 
 void  ConfigureWiFi(wifi_credential_t *pCredential)
 {
@@ -214,30 +212,23 @@ static void WiFi_EventHandler(void* arg, esp_event_base_t event_base, int32_t ev
 {
   if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
   {
-    ESP_LOGI(WiFiLogTag, "WIFI_EVENT_STA_START");
+    ESP_LOGI(WiFiLogTag, "Event: WIFI_EVENT_STA_START");
     esp_wifi_connect();
-    WiFi_NumConnectionAttempts = 0;
   }
   else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
   {
-/*
-    if (WiFi_NumConnectionAttempts < 1)
-    {
-      esp_wifi_connect();
-
-      xEventGroupClearBits(WiFi_EventGroup, WiFi_ConnectedBit);
-
-      ++WiFi_NumConnectionAttempts;
-
-      ESP_LOGI(WiFiLogTag, "Attempting to connect");
-    }
-    else 
-*/
-      ESP_LOGI(WiFiLogTag, "Failed to connect");
-      xEventGroupSetBits(WiFi_EventGroup, WiFi_ConnectionFailedBit);
+    ESP_LOGI(WiFiLogTag, "Event: WIFI_EVENT_STA_DISCONNECTED");
+    
+    ++WiFi_CurrentCredentialIndex;
+    if (WiFi_CurrentCredentialIndex == WiFiCredentials.size())
+      WiFi_CurrentCredentialIndex = 0;
+    ConfigureWiFi(&WiFiCredentials[WiFi_CurrentCredentialIndex]);
+    esp_wifi_connect();
   }
   else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
   {
+    ESP_LOGI(WiFiLogTag, "Event: IP_EVENT_STA_GOT_IP");
+
     ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
     ESP_LOGI(WiFiLogTag, "Obtained IP:" IPSTR, IP2STR(&event->ip_info.ip));
     xEventGroupSetBits(WiFi_EventGroup, WiFi_ConnectedBit);
@@ -261,41 +252,9 @@ void WiFi_Initialize(void)
   ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &WiFi_EventHandler, NULL, &instance_any_id));
   ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &WiFi_EventHandler, NULL, &instance_got_ip));
   ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-  
   WiFi_CurrentCredentialIndex = 0;
-  while(WiFi_CurrentCredentialIndex<WiFiCredentials.size())
-  {
-    xEventGroupClearBits(WiFi_EventGroup, WiFi_ConnectedBit | WiFi_ConnectionFailedBit);
-
-    ConfigureWiFi(&WiFiCredentials[WiFi_CurrentCredentialIndex]);
-
-    WiFi_NumConnectionAttempts = 0;
-
-/*
-    bool Started=false;
-    if (!Started)
-    {
-      Started=true;
-      ESP_ERROR_CHECK(esp_wifi_start());
-    }
-    else
-    {
-      ESP_ERROR_CHECK(esp_wifi_connect());
-    }
-*/
-    ESP_ERROR_CHECK(esp_wifi_start());
-    
-    EventBits_t WaitBits = xEventGroupWaitBits(WiFi_EventGroup, WiFi_ConnectedBit | WiFi_ConnectionFailedBit, pdFALSE, pdFALSE, portMAX_DELAY);
-    
-    if (WaitBits & WiFi_ConnectedBit) 
-      break;
-    
-    ESP_ERROR_CHECK(esp_wifi_stop());
-    
-    ++WiFi_CurrentCredentialIndex;
-    // if (WiFi_CurrentCredentialIndex == WiFi_NumCredentials)
-    //  WiFi_CurrentCredentialIndex = 0;
-  }
+  ConfigureWiFi(&WiFiCredentials[WiFi_CurrentCredentialIndex]);
+  ESP_ERROR_CHECK(esp_wifi_start());
 }
 
 void WifiServer_Go(void *)
