@@ -243,8 +243,8 @@ void WiFi_Initialize(void)
   {
       .sta =
       {
-          .ssid = WiFi_SSID,
-          .password = WiFi_Password,
+          .ssid = WiFiCredentials_SSID,
+          .password = WiFiCredentials_Password,
 					/* Authmode threshold resets to WPA2 as default if password matches WPA2 standards (pasword len => 8).
 					 * If you want to connect the device to deprecated WEP/WPA networks, Please set the threshold value
 					 * to WIFI_AUTH_WEP/WIFI_AUTH_WPA_PSK and set the password with length and format matching to
@@ -388,7 +388,7 @@ void WifiServer_Go()
           {
             char *pCommand = pInputBuffer + 5;
 
-            // 192.168.1.22/State?N=0.123
+            // <IP_Address>/State?N=0.123
             if (strncasecmp(pCommand, "State?", 6) == 0)
             {
               pCommand += 6;
