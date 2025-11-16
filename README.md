@@ -28,7 +28,7 @@ JTAG debugging:
   • For this project, I've used gdb on the command line and in Eclipse.
 • Help: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/jtag-debugging/index.html  
 • Device: FT4232 (Quad)  
-• Use Zaqig to set "Quad RS232HS (Interface 0)" to use driver "WinUSB (v6.1.7600.16385)".  
+• Use Zadig to set "Quad RS232HS (Interface 0)" to use driver "WinUSB (v6.1.7600.16385)".  
 • Connections from lamp to device:  
   • J1-1 (GND) <=> GND  
   • J1-2 (VTRef) <=> No connection  
