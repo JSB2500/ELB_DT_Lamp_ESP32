@@ -864,12 +864,12 @@ void app_main()
 {
   esp_err_t ret;
 
-  ESP_LOGI(DefaultLogTag, "Initializing NVS:\n");
+  ESP_LOGI(DefaultLogTag, "Initializing NVS:");
   NVS_Initialize();
-  ESP_LOGI(DefaultLogTag, "Done\n");
+  ESP_LOGI(DefaultLogTag, "Done");
 
   // Initialize the SPI buses:
-  ESP_LOGI(DefaultLogTag, "Initializing DisplaySPI bus:\n");
+  ESP_LOGI(DefaultLogTag, "Initializing DisplaySPI bus:");
   spi_bus_config_t DisplaySPI_BusConfiguration =
   {
 	  .mosi_io_num = DisplaySPI_MOSI_GPIO,
@@ -889,9 +889,9 @@ void app_main()
   };
   ret = spi_bus_initialize(DisplaySPI_HostDevice, &DisplaySPI_BusConfiguration, DisplaySPI_DMAChannel);
   assert(ret==ESP_OK);
-  ESP_LOGI(DefaultLogTag, "Done\n");
+  ESP_LOGI(DefaultLogTag, "Done");
   //
-  ESP_LOGI(DefaultLogTag, "Initializing TouchPanelSPI bus:\n");
+  ESP_LOGI(DefaultLogTag, "Initializing TouchPanelSPI bus:");
   spi_bus_config_t TouchPanelSPI_BusConfiguration =
   {
     .mosi_io_num = TouchPanelSPI_MOSI_GPIO,
@@ -911,7 +911,7 @@ void app_main()
   };
   ret = spi_bus_initialize(TouchPanelSPI_HostDevice, &TouchPanelSPI_BusConfiguration, TouchPanelSPI_DMAChannel);
   assert(ret==ESP_OK);
-  ESP_LOGI(DefaultLogTag, "Done\n");
+  ESP_LOGI(DefaultLogTag, "Done");
   fflush(stdout);
 
   // Set touch calibration: [Display area only! Don't include thick black bar at bottom, for example!]
@@ -921,21 +921,21 @@ void app_main()
   XPT2046_RawY_Min = 250; // Was 320
   XPT2046_RawY_Max = 3700; // Was 3750
 
-  ESP_LOGI(DefaultLogTag, "Initializing Display device:\n");
+  ESP_LOGI(DefaultLogTag, "Initializing Display device:");
   ILI9341_Initialize(DisplaySPI_HostDevice, Display_ResetX_GPIO, Display_CSX_GPIO, Display_D_CX_GPIO, Display_BacklightX_GPIO);
-  ESP_LOGI(DefaultLogTag, "Done\n");
+  ESP_LOGI(DefaultLogTag, "Done");
 
-  ESP_LOGI(DefaultLogTag, "Initializing TouchPanel device:\n");
+  ESP_LOGI(DefaultLogTag, "Initializing TouchPanel device:");
   XPT2046_Initialize(TouchPanelSPI_HostDevice, TouchPanel_CSX_GPIO);
-  ESP_LOGI(DefaultLogTag, "Done\n");
+  ESP_LOGI(DefaultLogTag, "Done");
 
-  ESP_LOGI(DefaultLogTag, "Initializing LED control:\n");
+  ESP_LOGI(DefaultLogTag, "Initializing LED control:");
   InitializeLEDControl();
-  ESP_LOGI(DefaultLogTag, "Done\n");
+  ESP_LOGI(DefaultLogTag, "Done");
 
-  ESP_LOGI(DefaultLogTag, "Initializing WiFi:\n");
+  ESP_LOGI(DefaultLogTag, "Initializing WiFi:");
   WiFi_Initialize();
-  ESP_LOGI(DefaultLogTag, "Done\n");
+  ESP_LOGI(DefaultLogTag, "Done");
 
   xTaskCreate(WifiServer_Go, "WifiServer", 32768, NULL, tskIDLE_PRIORITY, NULL); // Huge stack of 32768 due to stack usage of regex_search() for 100+ char input strings.
 
